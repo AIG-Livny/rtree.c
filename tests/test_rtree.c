@@ -131,7 +131,10 @@ void test_rtree_predef_svg(void) {
     int N = sizeof(predef)/(sizeof(double)*2);
     for (int i = 0; i < N; i++) {
         double *point = &predef[i*2];
-        while (!rtree_insert(tr, point, point, (void *)(uintptr_t)i)){}
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        while (!rtree_insert(tr, &rect, (void *)(uintptr_t)i)){}
     }
     rtree_write_svg(tr, "predefined.svg");
     rtree_free(tr);
@@ -145,7 +148,10 @@ void test_rtree_cities_svg(void) {
     int N = sizeof(cities)/(sizeof(double)*2);
     for (int i = 0; i < N; i++) {
         double *point = &cities[i*2];
-        while (!rtree_insert(tr, point, point, (void *)(uintptr_t)i)){}
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        while (!rtree_insert(tr, &rect, (void *)(uintptr_t)i)){}
     }
     rtree_write_svg(tr, "cities.svg");
     rtree_free(tr);
@@ -162,10 +168,10 @@ struct iter_scan_all_ctx {
     size_t count;
 };
 
-bool iter_scan_all(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *data,
+bool iter_scan_all(const struct rtree_rect* rect, const void *data,
     void *udata)
 {
-    (void)min; (void)max; (void)data;
+    (void)data;
     struct iter_scan_all_ctx *ctx = udata;
     ctx->count++;
     return true;
@@ -175,10 +181,10 @@ struct iter_two_ctx {
     size_t count;
 };
 
-bool iter_two(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *data,
+bool iter_two(const struct rtree_rect* rect, const void *data,
     void *udata)
 {
-    (void)min; (void)max; (void)data;
+    (void)data;
     struct iter_two_ctx *ctx = udata;
     ctx->count++;
     return ctx->count < 2;
@@ -187,19 +193,17 @@ bool iter_two(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *da
 
 void test_rtree_ops(void) {
     int N = 10000;
-    RTREE_NUMTYPE *coords;
-    while (!(coords = xmalloc(sizeof(RTREE_NUMTYPE)*RTREE_DIMS*2*N))) {}
+    struct rtree_rect* rects;
+    while (!(rects = xmalloc(sizeof(struct rtree_rect)*N))) {}
     for (int i = 0; i < N; i++) {
-        fill_rand_rect(&coords[i*RTREE_DIMS*2]);
+        fill_rand_rect(&rects[i]);
     }
     struct rtree *tr;
     while (!(tr = rtree_new_with_allocator(xmalloc, xfree))){}
     for (int i = 0; i < N; i++) {
-        RTREE_NUMTYPE *min = &coords[i*RTREE_DIMS*2+0];
-        RTREE_NUMTYPE *max = &coords[i*RTREE_DIMS*2+RTREE_DIMS];
         void *data = (void *)(uintptr_t)i;
-        while (!rtree_insert(tr, min, max, data)){}
-        assert(find_one(tr, min, max, data, NULL, NULL));
+        while (!rtree_insert(tr, &rects[N], data)){}
+        assert(find_one(tr, &rects[N], data, NULL, NULL));
         assert(rtree_count(tr) == (size_t)(i+1));
         if (i%1000==0) assert(rtree_check(tr));
     }
@@ -221,34 +225,32 @@ void test_rtree_ops(void) {
     struct iter_two_ctx ctx = { 0 };
     if(is_float_point(RTREE_NUMTYPE)){
         #if RTREE_DIMS == 2
-        rtree_search(tr, (RTREE_NUMTYPE[RTREE_DIMS]){ -180.0, -90.0 }, (RTREE_NUMTYPE[RTREE_DIMS]){ 180.0, 90.0 }, 
-        iter_two, &ctx);
+        struct rtree_rect rect = {-180.0, -90.0, 180.0, 90.0};
+        rtree_search(tr, &rect, iter_two, &ctx);
         assert(ctx.count == 2);
         #endif
     }
 
     for (int i = 0; i < N; i++) {
-        RTREE_NUMTYPE *min = &coords[i*RTREE_DIMS*2+0];
-        RTREE_NUMTYPE *max = &coords[i*RTREE_DIMS*2+RTREE_DIMS];
         void *data = (void *)(uintptr_t)i;
         assert(rtree_count(tr) == (size_t)(N-i));
-        assert(find_one(tr, min, max, data, NULL, NULL));
+        assert(find_one(tr, &rects[N], data, NULL, NULL));
         if (i % 2) {
             int x = 9876;
-            while (!rtree_delete_with_comparator(tr, min, max, data,
+            while (!rtree_delete_with_comparator(tr, &rects[N], data,
                 comparator, &x)) {}
         } else {
             // This first delete will not delete anything because the pointer
             // is invalid.
-            while (!rtree_delete(tr, min, max, data+1)){}
+            while (!rtree_delete(tr, &rects[N], data+1)){}
             // This one will delete
-            while (!rtree_delete(tr, min, max, data)){}
+            while (!rtree_delete(tr, &rects[N], data)){}
         }
-        assert(!find_one(tr, min, max, data, NULL, NULL));
+        assert(!find_one(tr, &rects[N], data, NULL, NULL));
         assert(rtree_count(tr) == (size_t)(N-i-1));
         if (i%1000==0) assert(rtree_check(tr));
 
-        while (!rtree_delete(tr, min, max, data)){}
+        while (!rtree_delete(tr, &rects[N], data)){}
         assert(rtree_count(tr) == (size_t)(N-i-1));
 
     }
@@ -256,14 +258,14 @@ void test_rtree_ops(void) {
     assert(rtree_check(tr));
 
     rtree_free(tr);
-    xfree(coords);
+    xfree(rects);
 }
 
 void test_rtree_various(void) {
     struct rtree *tr = rtree_new();
     assert(tr);
     rtree_opt_relaxed_atomics(tr);
-    rtree_insert(tr, (RTREE_NUMTYPE[RTREE_DIMS]){1}, (RTREE_NUMTYPE[RTREE_DIMS]){2}, (void*)1);
+    rtree_insert(tr, &(struct rtree_rect){.min={1}, .max={2}}, (void*)1);
     rtree_free(tr);
 }
 

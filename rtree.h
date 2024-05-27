@@ -28,16 +28,23 @@ extern "C" {
 #define RTREE_MAXITEMS 64
 #endif
 
-typedef bool (rtree_iter)(const RTREE_NUMTYPE min[], const RTREE_NUMTYPE max[], const RTREE_DATATYPE data, void *udata);
+struct rtree_rect {
+    RTREE_NUMTYPE min[RTREE_DIMS];
+    RTREE_NUMTYPE max[RTREE_DIMS];
+};
+
+typedef bool (rtree_iter)(const struct rtree_rect* rect, const RTREE_DATATYPE data, void *udata);
 typedef bool (rtree_clone_cb)(const void *item, void **into, void *udata);
 typedef void (rtree_free_cb)(const void *item, void *udata);
 typedef int  (rtree_compare)(const RTREE_DATATYPE a, const RTREE_DATATYPE b, void *udata);
+
+// find new min and max values if they are mixed up
+void rtree_rect_fix(struct rtree_rect *rect);
 
 // rtree_new returns a new rtree
 //
 // Returns NULL if the system is out of memory.
 struct rtree *rtree_new(void);
-
 
 // rtree_new returns a new rtree using a custom allocator
 //
@@ -72,20 +79,20 @@ void rtree_set_udata(struct rtree *tr, void *udata);
 //
 // This operation performs a copy of the data that is pointed to in the second
 // and third arguments. The R-tree expects a rectangle, which is two arrays of
-// doubles. The first N values as the minimum corner of the rect, and the next
-// N values as the maximum corner of the rect, where N is the number of
+// doubles. The first N values as the minimum corner of the rtree_rect, and the next
+// N values as the maximum corner of the rtree_rect, where N is the number of
 // dimensions.
 //
 // When inserting points, the max coordinates is optional (set to NULL).
 //
 // Returns false if the system is out of memory.
-bool rtree_insert(struct rtree *tr, const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const RTREE_DATATYPE data);
+bool rtree_insert(struct rtree *tr, const struct rtree_rect* rect, const RTREE_DATATYPE data);
 
 // rtree_search searches the rtree and iterates over each item that intersect
 // the provided rectangle.
 //
 // Returning false from the iter will stop the search.
-void rtree_search(const struct rtree *tr, const RTREE_NUMTYPE min[], const RTREE_NUMTYPE max[], rtree_iter *iter, void *udata);
+void rtree_search(const struct rtree *tr, const struct rtree_rect* rect, rtree_iter *iter, void *udata);
 
 // rtree_radius_search searches the rtree and iterates over each item that intersect
 // the provided circle or sphere defined by point and radius
@@ -108,7 +115,7 @@ size_t rtree_count(const struct rtree *tr);
 // data. The first item that is found is deleted.
 //
 // Returns false if the system is out of memory.
-bool rtree_delete(struct rtree *tr, const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const RTREE_DATATYPE data);
+bool rtree_delete(struct rtree *tr, struct rtree_rect* rect, const RTREE_DATATYPE data);
 
 // rtree_delete_with_comparator deletes an item from the rtree.
 // This searches the tree for an item that is contained within the provided
@@ -116,8 +123,7 @@ bool rtree_delete(struct rtree *tr, const RTREE_NUMTYPE *min, const RTREE_NUMTYP
 // a compare function. The first item that is found is deleted.
 //
 // Returns false if the system is out of memory.
-bool rtree_delete_with_comparator(struct rtree *tr, const RTREE_NUMTYPE *min, 
-    const RTREE_NUMTYPE *max, const RTREE_DATATYPE data,
+bool rtree_delete_with_comparator(struct rtree *tr, struct rtree_rect* rect, const RTREE_DATATYPE data,
     rtree_compare *compare,
     void *udata);
 

@@ -6,8 +6,7 @@
 // }
 
 struct pair {
-    RTREE_NUMTYPE min[RTREE_DIMS];
-    RTREE_NUMTYPE max[RTREE_DIMS];
+    struct rtree_rect rect;
     int key;
     int val;
 };
@@ -54,7 +53,7 @@ void test_clone_items_withcallbacks(bool withcallbacks) {
     while (!(pairs = xmalloc(sizeof(struct pair*) * N)));
     for (size_t i = 0; i < N; i++) {
         while (!(pairs[i] = xmalloc(sizeof(struct pair))));
-        fill_rand_rect(&pairs[i]->min[0]);
+        fill_rand_rect(&pairs[i]->rect);
         pairs[i]->val = i;
     }
     shuffle(pairs, N, sizeof(struct pair*));
@@ -67,7 +66,7 @@ void test_clone_items_withcallbacks(bool withcallbacks) {
             rtree_set_item_callbacks(tr, pair_clone, pair_free);
         }
         for (size_t i = 0; i < N; i++) {
-            while(!(rtree_insert(tr, pairs[i]->min, pairs[i]->max, pairs[i])));
+            while(!(rtree_insert(tr, &pairs[i]->rect, pairs[i])));
         }
         assert(rtree_check(tr));
         rtree_free(tr);
@@ -78,8 +77,8 @@ void test_clone_items_withcallbacks(bool withcallbacks) {
         rtree_set_item_callbacks(tr, pair_clone, pair_free);
     }
     for (size_t i = 0; i < N; i++) {
-        while(!(rtree_insert(tr, pairs[i]->min, pairs[i]->max, pairs[i])));
-        assert(find_one(tr, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare0, NULL));
+        while(!(rtree_insert(tr, &pairs[i]->rect, pairs[i])));
+        assert(find_one(tr, &pairs[i]->rect, pairs[i], pair_compare0, NULL));
     }
     assert(rtree_count(tr) == N);
     assert(rtree_check(tr));
@@ -90,12 +89,12 @@ void test_clone_items_withcallbacks(bool withcallbacks) {
     for (size_t i = 0; i < N; i++) {
         while(!(pairs2[i] = pair_clone0(pairs[i])));
         pairs2[i]->val++;
-        assert(find_one(tr, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare0, NULL));
-        assert(!find_one(tr, pairs2[i]->min, pairs2[i]->max, pairs2[i], pair_compare0, NULL));
-        while(!(rtree_delete_with_comparator(tr, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare, NULL)));
-        while(!(rtree_insert(tr, pairs2[i]->min, pairs2[i]->max, pairs2[i])));
-        assert(!find_one(tr, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare0, NULL));
-        assert(find_one(tr, pairs2[i]->min, pairs2[i]->max, pairs2[i], pair_compare0, NULL));
+        assert(find_one(tr, &pairs[i]->rect, pairs[i], pair_compare0, NULL));
+        assert(!find_one(tr, &pairs2[i]->rect, pairs2[i], pair_compare0, NULL));
+        while(!(rtree_delete_with_comparator(tr, &pairs[i]->rect, pairs[i], pair_compare, NULL)));
+        while(!(rtree_insert(tr, &pairs2[i]->rect, pairs2[i])));
+        assert(!find_one(tr, &pairs[i]->rect, pairs[i], pair_compare0, NULL));
+        assert(find_one(tr, &pairs2[i]->rect, pairs2[i], pair_compare0, NULL));
     }
 
     assert(rtree_count(tr) == N);
@@ -130,7 +129,7 @@ void test_clone_delete_withcallbacks(bool withcallbacks) {
     while (!(pairs = xmalloc(sizeof(struct pair*) * N)));
     for (size_t i = 0; i < N; i++) {
         while (!(pairs[i] = xmalloc(sizeof(struct pair))));
-        fill_rand_rect(&pairs[i]->min[0]);
+        fill_rand_rect(&pairs[i]->rect);
         pairs[i]->val = i;
     }
     shuffle(pairs, N, sizeof(struct pair*));
@@ -142,7 +141,7 @@ void test_clone_delete_withcallbacks(bool withcallbacks) {
         rtree_set_item_callbacks(tr, pair_clone, pair_free);
     }
     for (size_t i = 0; i < N; i++) {
-        while(!(rtree_insert(tr, pairs[i]->min, pairs[i]->max, pairs[i])));
+        while(!(rtree_insert(tr, &pairs[i]->rect, pairs[i])));
     }
     assert(rtree_check(tr));
 
@@ -157,7 +156,7 @@ void test_clone_delete_withcallbacks(bool withcallbacks) {
     shuffle(pairs, N, sizeof(struct pair*));
     for (size_t i = 0; i < N; i++) {
         // printf("%zu: %zu\n", i, rtree_count(tr));
-        while(!(rtree_delete_with_comparator(tr, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare, NULL)));
+        while(!(rtree_delete_with_comparator(tr, &pairs[i]->rect, pairs[i], pair_compare, NULL)));
         assert(rtree_check(tr));
         // printf("%zu: %zu\n", i, rtree_count(tr));
         assert(rtree_count(tr) == N-i-1);
@@ -166,7 +165,7 @@ void test_clone_delete_withcallbacks(bool withcallbacks) {
     
     shuffle(pairs, N, sizeof(struct pair*));
     for (size_t i = 0; i < N; i++) {
-        while(!(rtree_delete_with_comparator(tr2, pairs[i]->min, pairs[i]->max, pairs[i], pair_compare, NULL)));
+        while(!(rtree_delete_with_comparator(tr2, &pairs[i]->rect, pairs[i], pair_compare, NULL)));
         // assert(rtree_check(tr2));
         assert(rtree_count(tr2) == N-i-1);
     }
@@ -194,7 +193,7 @@ void test_clone_pairs_diverge_withcallbacks(bool withcallbacks) {
 
     for (size_t i = 0; i < N; i++) {
         while (!(pairs[i] = xmalloc(sizeof(struct pair))));
-        fill_rand_rect(&pairs[i]->min[0]);
+        fill_rand_rect(&pairs[i]->rect);
         pairs[i]->key = i;
         pairs[i]->val = 0;
     }
@@ -209,7 +208,7 @@ void test_clone_pairs_diverge_withcallbacks(bool withcallbacks) {
         rtree_set_item_callbacks(tr1, pair_clone, pair_free);
     }
     for (size_t i = 0; i < N; i++) {
-        while(!(rtree_insert(tr1, pairs[i]->min, pairs[i]->max, pairs[i])));
+        while(!(rtree_insert(tr1, &pairs[i]->rect, pairs[i])));
     }
     assert(rtree_count(tr1) == N);
     assert(rtree_check(tr1));
@@ -232,18 +231,17 @@ void test_clone_pairs_diverge_withcallbacks(bool withcallbacks) {
         while (!(pair2 = pair_clone0(pairs[i])));
         pair2->val = 1;
         struct pair *prev;
-        assert(find_one(tr1, pairs[i]->min, pairs[i]->max, 
+        assert(find_one(tr1, &pairs[i]->rect, 
             pairs[i], pair_compare0, (void*)&prev));
         assert(prev);
         assert(((struct pair*)prev)->val == 0);
-        while (!(rtree_delete_with_comparator(tr1, pairs[i]->min, pairs[i]->max, 
+        while (!(rtree_delete_with_comparator(tr1, &pairs[i]->rect, 
             pairs[i], pair_compare, NULL)));
         assert(rtree_count(tr1) == N-1);
-        while (!(rtree_insert(tr1, pair2->min, pair2->max, pair2)));
+        while (!(rtree_insert(tr1, &pair2->rect, pair2)));
         assert(rtree_count(tr1) == N);
         struct pair *new;
-        assert(find_one(tr1, pair2->min, pair2->max, 
-            pair2, pair_compare0, (void*)&new));
+        assert(find_one(tr1, &pair2->rect, pair2, pair_compare0, (void*)&new));
         assert(new);
         assert(((struct pair*)new)->val == 1);
         if (pairs2) {
@@ -283,13 +281,13 @@ void test_clone_pairs_diverge_nocallbacks(void) {
 // cloneable object
 struct cobj {
     atomic_int rc;
-    struct rect rect;
+    struct rtree_rect rtree_rect;
     char *key;
     char *val;
 };
 
 
-struct cobj *cobj_new(struct rect rect, const char *key, const char *val) {
+struct cobj *cobj_new(struct rtree_rect rtree_rect, const char *key, const char *val) {
     struct cobj *obj = xmalloc(sizeof(struct cobj));
     if (!obj) return NULL;
     memset(obj, 0, sizeof(struct cobj));
@@ -306,7 +304,7 @@ struct cobj *cobj_new(struct rect rect, const char *key, const char *val) {
     }
     strcpy(obj->key, key);
     strcpy(obj->val, val);
-    obj->rect = rect;
+    obj->rtree_rect = rtree_rect;
     return obj;
 }
 
@@ -371,10 +369,8 @@ struct iter_clone_access_all {
     size_t count;
 };
 
-bool iter_clone_access_all(const RTREE_NUMTYPE min[], const RTREE_NUMTYPE max[], 
-    const void *data, void *udata)
-{
-    (void)min; (void)max; (void)data;
+bool iter_clone_access_all(const struct rtree_rect* rect, const void *data, void *udata){
+    (void)data;
     const struct cobj *obj = data;
     struct iter_clone_access_all *ctx = udata;
 
@@ -423,8 +419,7 @@ void *thdwork(void *tdata) {
 
     // delete every other object
     for (int i = 0; i < NOBJS; i += 2) {
-        assert(rtree_delete_with_comparator(rtree, objs[i]->rect.min, 
-            objs[i]->rect.max, objs[i], cobj_compare, NULL));
+        assert(rtree_delete_with_comparator(rtree, &objs[i]->rtree_rect, objs[i], cobj_compare, NULL));
     }
     assert(rtree_count(rtree) == (size_t)NOBJS/2);
 
@@ -456,15 +451,14 @@ void test_clone_threads(void) {
 
     // create a bunch of random objects
     for (int i = 0; i < NOBJS; i++) {
-        struct rect rect = rand_rect();
+        struct rtree_rect rtree_rect = rand_rect();
         char *key = rand_key(10);
         char *val = rand_key(10);
-        objs[i] = cobj_new(rect, key, val);
+        objs[i] = cobj_new(rtree_rect, key, val);
         assert(objs[i]);
         xfree(key);
         xfree(val);
-        const void *prev = rtree_set(rtree, objs[i]->rect.min, 
-            objs[i]->rect.max, objs[i]);
+        const void *prev = rtree_set(rtree, &objs[i]->rtree_rect, objs[i]);
         assert(!prev);
     }
     assert(rtree_count(rtree) == (size_t)NOBJS);

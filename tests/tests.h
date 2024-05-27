@@ -53,8 +53,8 @@ DISABLE_WARNING(-Wpedantic)
 // checker
 //////////////////
 
-static bool node_check_rect(const struct rect *rect, struct node *node) {
-    struct rect rect2 = node_rect_calc(node);
+static bool node_check_rect(const struct rtree_rect *rect, struct node *node) {
+    struct rtree_rect rect2 = node_rect_calc(node);
     if (!rect_equals(rect, &rect2)){
         fprintf(stderr, "invalid rect\n");
         return false;
@@ -101,7 +101,7 @@ static const double svg_scale = 20.0;
 static const char *strokes[] = { "black", "red", "green", "purple" };
 static const int nstrokes = 4;
 
-static void node_write_svg(const struct node *node, const struct rect *rect, 
+static void node_write_svg(const struct node *node, const struct rtree_rect *rect, 
     FILE *f, int depth)
 {
     bool point = rect->min[0] == rect->max[0] && rect->min[1] == rect->max[1];
@@ -291,31 +291,31 @@ double rand_double() {
     return (double)rand() / ((double)RAND_MAX+1);
 }
 
-void fill_rand_rect(RTREE_NUMTYPE *coords) {
+void fill_rand_rect(struct rtree_rect* rect) {
     if (is_float_point(RTREE_NUMTYPE)){
         #if RTREE_DIMS == 2
-        coords[0] = rand_double()*360-180;
-        coords[1] = rand_double()*180-90;
-        coords[2] = coords[0]+(rand_double()*2);
-        coords[3] = coords[1]+(rand_double()*2);
+        rect->min[0] = rand_double()*360-180;
+        rect->min[1] = rand_double()*180-90;
+        rect->max[0] = rect->min[0]+(rand_double()*2);
+        rect->max[1] = rect->min[1]+(rand_double()*2);
         #else
         for (int d = 0; d < RTREE_DIMS; d++){
-            coords[d] = rand_double();
-            coords[d+RTREE_DIMS] = coords[d]+(rand_double());
+            rect->min[d] = rand_double();
+            rect->max[d] = rect->min[d]+(rand_double());
         }
         #endif
     }else{
         for (int d = 0; d < RTREE_DIMS; d++){
-            coords[d] = rand()>>1;
-            coords[d+RTREE_DIMS] = coords[d]+(rand()>>1);
+            rect->min[d] = rand()>>1;
+            rect->max[d] = rect->min[d]+(rand()>>1);
         }
     }
     
 }
 
-struct rect rand_rect() {
-    struct rect rect;
-    fill_rand_rect(&rect.min[0]);
+struct rtree_rect rand_rect() {
+    struct rtree_rect rect;
+    fill_rand_rect(&rect);
     return rect;
 }
 
@@ -343,10 +343,9 @@ struct find_one_context {
     int(*compare)(const void *a, const void *b);
 };
 
-bool find_one_iter(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *data,
+bool find_one_iter(const struct rtree_rect *rect, const void *data,
     void *udata)
 {
-    (void)min; (void)max;
     struct find_one_context *ctx = udata;
     if ((ctx->compare && ctx->compare(data, ctx->target) == 0) ||
         data == ctx->target)
@@ -358,11 +357,11 @@ bool find_one_iter(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const voi
     return true;
 }
 
-bool find_one(struct rtree *tr, const RTREE_NUMTYPE min[], const RTREE_NUMTYPE max[], 
+bool find_one(struct rtree *tr, const struct rtree_rect* rect, 
     void *data, int(*compare)(const void *a, const void *b), void **found_data)
 {
     struct find_one_context ctx = { .target = data, .compare = compare };
-    rtree_search(tr, min, max, find_one_iter, &ctx);
+    rtree_search(tr, rect, find_one_iter, &ctx);
     if (found_data) {
         *found_data = ctx.found ? ctx.found_data : NULL;
     }
@@ -401,19 +400,17 @@ char *rand_key(int nchars) {
 
 static void *oom_ptr = (void*)(uintptr_t)(intptr_t)-1;
 
-void *rtree_set(struct rtree *tr, const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, 
-    void *data)
-{
+void *rtree_set(struct rtree *tr, struct rtree_rect *rect, void *data) {
     void *prev = NULL;
     size_t n = rtree_count(tr);
-    if (find_one(tr, min, max, data, NULL, NULL)) {
+    if (find_one(tr, rect, data, NULL, NULL)) {
         prev = data;
         size_t n = rtree_count(tr);
-        if (!rtree_delete(tr, min, max, data)) return oom_ptr;
+        if (!rtree_delete(tr, rect, data)) return oom_ptr;
         assert(rtree_count(tr) == n-1);
         n--;
     }
-    if (!rtree_insert(tr, min, max, data)) return oom_ptr;
+    if (!rtree_insert(tr, rect, data)) return oom_ptr;
     assert(rtree_count(tr) == n+1);
     
     return prev;

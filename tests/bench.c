@@ -171,7 +171,7 @@ uint32_t hilbert(double lat, double lon) {
 
 
 
-static bool search_iter(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *item, void *udata) {
+static bool search_iter(const struct rtree_rect* rect, const void *item, void *udata) {
     (*(int*)udata)++;
     return true;
 }
@@ -182,11 +182,11 @@ struct search_iter_one_context {
     int count;
 };
 
-static bool search_iter_one(const RTREE_NUMTYPE *min, const RTREE_NUMTYPE *max, const void *data, void *udata) {
+static bool search_iter_one(const struct rtree_rect* rect, const void *data, void *udata) {
     struct search_iter_one_context *ctx = (struct search_iter_one_context *)udata;
     if (data == ctx->data) {
-        assert(memcmp(min, ctx->point, sizeof(RTREE_NUMTYPE)*RTREE_DIMS) == 0);
-        assert(memcmp(max, ctx->point, sizeof(RTREE_NUMTYPE)*RTREE_DIMS) == 0);
+        assert(memcmp(rect->min, ctx->point, sizeof(RTREE_NUMTYPE)*RTREE_DIMS) == 0);
+        assert(memcmp(rect->max, ctx->point, sizeof(RTREE_NUMTYPE)*RTREE_DIMS) == 0);
         ctx->count++;
         return false;
     }
@@ -254,10 +254,13 @@ void sort_points(RTREE_NUMTYPE *points, int N) {
     qsort(points, N, sizeof(RTREE_NUMTYPE)*RTREE_DIMS, point_compare);
 } 
 
-void insert(struct rtree *tr,RTREE_NUMTYPE *points, int N){
+void insert(struct rtree *tr, RTREE_NUMTYPE *points, int N){
     for (int i = 0; i < N; i++){
         RTREE_NUMTYPE *point = &points[i*RTREE_DIMS];
-        rtree_insert(tr, point, point, (void *)(uintptr_t)(i));
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        rtree_insert(tr, &rect, (void *)(uintptr_t)(i));
         assert(rtree_count(tr) == i+1);
     }
 }
@@ -268,35 +271,37 @@ void search_item(struct rtree *tr,RTREE_NUMTYPE *points, int N){
         struct search_iter_one_context ctx = { 0 };
         ctx.point = point;
         ctx.data = (void *)(uintptr_t)(i);
-        rtree_search(tr, point, point, search_iter_one, &ctx);
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        rtree_search(tr, &rect, search_iter_one, &ctx);
         assert(ctx.count == 1);
     }
 }
 
 void search(struct rtree *tr,RTREE_NUMTYPE *points, int N, double p){
     for (int i = 0; i < N; i++){
-        RTREE_NUMTYPE min[RTREE_DIMS];
-        RTREE_NUMTYPE max[RTREE_DIMS];
+        struct rtree_rect rect;
         if(is_float_point(RTREE_NUMTYPE)){
             #if RTREE_DIMS == 2
-            min[0] = rand_double() * 360.0 - 180.0;
-            min[1] = rand_double() * 180.0 - 90.0;
-            max[0] = min[0] + 360.0*p;
-            max[1] = min[1] + 180.0*p;
+            rect.min[0] = rand_double() * 360.0 - 180.0;
+            rect.min[1] = rand_double() * 180.0 - 90.0;
+            rect.max[0] = rect.min[0] + 360.0*p;
+            rect.max[1] = rect.min[1] + 180.0*p;
             #else
             for (int d = 0; d < RTREE_DIMS; d++){
-                min[d] = rand_double();
-                max[d] = min[d] + 360.0*p;
+                rect.min[d] = rand_double();
+                rect.max[d] = rect.min[d] + 360.0*p;
             }
             #endif
         }else{
             for (int d = 0; d < RTREE_DIMS; d++){
-                min[d] = rand();
-                max[d] = min[d] + 360*p;
+                rect.min[d] = rand();
+                rect.max[d] = rect.min[d] + 360*p;
             }
         }
         int res = 0;
-        rtree_search(tr, min, max, search_iter, &res);
+        rtree_search(tr, &rect, search_iter, &res);
         // printf("%d\n", res);
     }
 }
@@ -304,7 +309,10 @@ void search(struct rtree *tr,RTREE_NUMTYPE *points, int N, double p){
 void delete(struct rtree *tr,RTREE_NUMTYPE *points, int N){
     for (int i = 0; i < N; i++){
         RTREE_NUMTYPE *point = &points[i*RTREE_DIMS];
-        rtree_delete(tr, point, point, (void*)(uintptr_t)(i));
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        rtree_delete(tr, &rect, (void*)(uintptr_t)(i));
         assert(rtree_count(tr) == N-i-1);
     }
 }
@@ -313,10 +321,15 @@ void replace(struct rtree *tr,RTREE_NUMTYPE *points, RTREE_NUMTYPE *points2, int
     for (int i = 0; i < N; i++){
         assert(rtree_count(tr) == N);
         RTREE_NUMTYPE *point = &points[i*RTREE_DIMS];
-        rtree_delete(tr, point, point, (void*)(uintptr_t)(i));
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        rtree_delete(tr, &rect, (void*)(uintptr_t)(i));
         assert(rtree_count(tr) == N-1);
         RTREE_NUMTYPE *point2 = &points2[i*RTREE_DIMS];
-        rtree_insert(tr, point2, point2, (void*)(uintptr_t)(i));
+        memcpy(rect.min,point2,RTREE_DIMS);
+        memcpy(rect.max,point2,RTREE_DIMS);
+        rtree_insert(tr, &rect, (void*)(uintptr_t)(i));
         assert(rtree_count(tr) == N);
     }
 }
@@ -349,7 +362,10 @@ void test_rand_bench(bool hilbert_ordered, int N) {
     RTREE_NUMTYPE *points2 = (RTREE_NUMTYPE *)xmalloc(N*RTREE_DIMS*sizeof(RTREE_NUMTYPE));
     for (int i = 0; i < N; i++) {
         RTREE_NUMTYPE *point = &points[i*RTREE_DIMS];
-        rtree_insert(tr, point, point, (void*)(uintptr_t)(i));
+        struct rtree_rect rect;
+        memcpy(rect.min,point,RTREE_DIMS);
+        memcpy(rect.max,point,RTREE_DIMS);
+        rtree_insert(tr, &rect, (void*)(uintptr_t)(i));
         assert(rtree_count(tr) == i+1);
         if(is_float_point(RTREE_NUMTYPE)){
             double rsize = 0.01; // size of rectangle in degrees
