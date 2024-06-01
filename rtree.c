@@ -829,3 +829,7 @@ struct rtree *rtree_clone(struct rtree *tr) {
 void rtree_opt_relaxed_atomics(struct rtree *tr) {
     tr->relaxed = true;
 }
+
+void rtree_aabb(struct rtree *tr, struct rtree_rect* rect) {
+    *rect = tr->rect;
+}

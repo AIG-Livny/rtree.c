@@ -132,6 +132,9 @@ bool rtree_delete_with_comparator(struct rtree *tr, struct rtree_rect* rect, con
 // Optionally, define RTREE_NOATOMICS to disbale all atomics.
 void rtree_opt_relaxed_atomics(struct rtree *tr);
 
+// return axis aligned bounding box
+void rtree_aabb(struct rtree *tr, struct rtree_rect* rect);
+
 #ifdef __cplusplus
 }
 #endif
